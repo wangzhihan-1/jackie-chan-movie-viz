@@ -4,22 +4,26 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>拳脚与镜头：成龙电影数据可视化分析</title>
-  <!-- 外部CDN引入依赖，无需本地下载 -->
+  <!-- CDN依赖 -->
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://d3js.org/d3.v7.min.js"></script>
   <script src="https://d3js.org/d3-contour.v2.min.js"></script>
   <script src="https://d3js.org/d3-geo.v3.min.js"></script>
   <script src="https://d3js.org/d3-hierarchy.v3.min.js"></script>
+  <script src="https://d3js.org/d3-cloud.v2.min.js"></script>
   <style>
-    /* 全局黑金电影风格样式 */
+    /* 全局黑金电影胶片风格 */
     :root {
       --black-main: #0a0a0f;
+      --film-dark: #121218;
       --gold-dark: #8c6d31;
       --gold-light: #ffd770;
       --gold-glow: #ffc845;
       --film-gray: #222228;
       --text-white: #f0f0f0;
+      --text-gray: #b8b8c2;
     }
+    * { box-sizing: border-box; }
     body {
       background-color: var(--black-main);
       color: var(--text-white);
@@ -28,13 +32,14 @@
         linear-gradient(rgba(140,109,49,0.08) 1px, transparent 1px);
       background-size: 40px 40px, 100% 60px;
     }
-    /* 胶片齿孔装饰 */
+    /* 胶片齿孔边框 */
     .film-border {
       position: relative;
       border: 2px solid var(--gold-dark);
       padding: 1.5rem;
       background: var(--film-gray);
       border-radius: 4px;
+      overflow: hidden;
     }
     .film-border::before, .film-border::after {
       content: "";
@@ -44,10 +49,19 @@
       background: var(--black-main);
       border: 1px solid var(--gold-dark);
       border-radius: 2px;
+      z-index: 2;
     }
     .film-border::before { top: -6px; left: -6px; }
     .film-border::after { bottom: -6px; right: -6px; }
-    /* 导航按钮样式 */
+    /* 上下胶片侧边孔装饰 */
+    .film-border::after {
+      box-shadow: 
+        calc(100% + 12px) 0 var(--black-main),
+        calc(100% + 12px) 24px var(--black-main),
+        calc(100% + 12px) 48px var(--black-main),
+        calc(100% + 12px) 72px var(--black-main);
+    }
+    /* 导航按钮 */
     .nav-btn {
       transition: all 0.3s ease;
       border: 1px solid var(--gold-dark);
@@ -64,7 +78,7 @@
       min-height: 600px;
       margin-top: 2rem;
     }
-    /* 悬浮tooltip弹窗 */
+    /* 悬浮提示框 */
     .tooltip {
       position: absolute;
       background: #000;
@@ -74,21 +88,22 @@
       pointer-events: none;
       opacity: 0;
       transition: opacity 0.2s;
-      z-index: 999;
+      z-index: 9999;
       font-size: 13px;
       max-width: 260px;
+      color: #fff;
     }
-    /* 页面分块，默认隐藏 */
+    /* 页面区块切换 */
     .page-section { display: none; }
     .page-section.active { display: block; }
-    /* 标题鎏金渐变文字 */
+    /* 鎏金渐变标题 */
     .gold-title {
       background: linear-gradient(90deg, #b88640, #ffe290, #b88640);
       -webkit-background-clip: text;
       color: transparent;
       text-shadow: 0 0 10px rgba(255,200,70,0.2);
     }
-    /* 胶片装饰图标简易样式 */
+    /* 摄影机胶片图标 */
     .film-icon {
       display: inline-block;
       width: 24px;
@@ -104,20 +119,25 @@
       width: 14px; height: 14px;
       background: var(--gold-light);
     }
+    hr {
+      border-color: #443320;
+      opacity: 0.4;
+    }
+    svg { overflow: visible; }
   </style>
 </head>
 <body class="px-4 md:px-10 py-8 max-w-[1600px] mx-auto">
-  <!-- 顶部标题栏 电影胶片装饰 -->
+  <!-- 顶部标题栏 -->
   <header class="film-border mb-10 text-center">
     <div class="flex justify-center items-center gap-3 mb-3">
       <span class="film-icon"></span>
       <h1 class="text-3xl md:text-4xl font-bold gold-title">拳脚与镜头：成龙电影数据可视化分析</h1>
       <span class="film-icon"></span>
     </div>
-    <p class="text-gray-300 mt-2">基于D3.js | 六十年影坛足迹多维度量化数据史诗</p>
+    <p class="text-gray-400 mt-2">D3.js 动态交互图表 | 黑金胶片电影风格 | 鼠标悬浮展示详情数据</p>
   </header>
 
-  <!-- 导航切换按钮组 -->
+  <!-- 导航切换按钮 -->
   <nav class="flex flex-wrap justify-center gap-3 mb-8">
     <button class="nav-btn px-5 py-2 rounded page-switch active" data-target="page1">一、群星闪耀 · 类型谱系</button>
     <button class="nav-btn px-5 py-2 rounded page-switch" data-target="page2">二、岁月留痕 · 时序轨迹</button>
@@ -125,15 +145,15 @@
     <button class="nav-btn px-5 py-2 rounded page-switch" data-target="page4">四、功夫解码 · 视听语言量化</button>
   </nav>
 
-  <!-- Tooltip悬浮弹窗容器 -->
+  <!-- 悬浮提示层 -->
   <div class="tooltip" id="tooltip"></div>
 
-  <!-- 页面1：群星闪耀——类型谱系 -->
+  <!-- 页面1：类型谱系 -->
   <section id="page1" class="page-section active film-border chart-wrap">
     <h2 class="text-2xl gold-title mb-6">① 层次树图：成龙电影类型谱系</h2>
     <div id="tree-chart"></div>
-    <hr class="my-8 border-[#443320]">
-    <h2 class="text-2xl gold-title mb-6">② 环图+玫瑰图：口碑/类型/年代产量分布</h2>
+    <hr class="my-8">
+    <h2 class="text-2xl gold-title mb-6">② 口碑分布环图 / 类型占比饼图 / 年代产量玫瑰图</h2>
     <div class="grid md:grid-cols-3 gap-6">
       <div id="ring-chart"></div>
       <div id="pie-chart"></div>
@@ -141,59 +161,44 @@
     </div>
   </section>
 
-  <!-- 页面2：岁月留痕——时间轨迹 -->
+  <!-- 页面2：时序轨迹 -->
   <section id="page2" class="page-section film-border chart-wrap">
-    <h2 class="text-2xl gold-title mb-6">③ 双轴直方图：年度产量&票房走势</h2>
+    <h2 class="text-2xl gold-title mb-6">③ 年度产量&票房双轴直方图</h2>
     <div id="hist-chart"></div>
-    <hr class="my-8 border-[#443320]">
-    <h2 class="text-2xl gold-title mb-6">④ 等高线密度图：票房品质地貌</h2>
+    <hr class="my-8">
+    <h2 class="text-2xl gold-title mb-6">④ 票房评分等高线密度图</h2>
     <div id="contour-chart"></div>
-    <hr class="my-8 border-[#443320]">
-    <h2 class="text-2xl gold-title mb-6">⑤ 三维散点星图（2D平面模拟）</h2>
-    <div id="3d-scatter-chart"></div>
+    <hr class="my-8">
+    <h2 class="text-2xl gold-title mb-6">⑤ 影片评分-票房二维散点图</h2>
+    <div id="scatter-chart"></div>
   </section>
 
-  <!-- 页面3：江湖纵横——合作网络&全球地图 -->
+  <!-- 页面3：合作网络&全球地图 -->
   <section id="page3" class="page-section film-border chart-wrap">
     <h2 class="text-2xl gold-title mb-6">⑥ 力导向图：主创合作星系网络</h2>
     <div id="force-chart"></div>
-    <hr class="my-8 border-[#443320]">
+    <hr class="my-8">
     <h2 class="text-2xl gold-title mb-6">⑦ 全球票房热力地图</h2>
     <div id="map-chart"></div>
   </section>
 
-  <!-- 页面4：功夫解码——视听语言 -->
+  <!-- 页面4：视听语言 -->
   <section id="page4" class="page-section film-border chart-wrap">
     <h2 class="text-2xl gold-title mb-6">⑧ 影评关键词云图</h2>
     <div id="wordcloud-chart"></div>
-    <hr class="my-8 border-[#443320]">
-    <h2 class="text-2xl gold-title mb-6">⑨ ASL剪辑节奏&景深镜头量化图表</h2>
+    <hr class="my-8">
+    <h2 class="text-2xl gold-title mb-6">⑨ ASL平均镜头时长 / 景深镜头占比堆叠图</h2>
     <div class="grid md:grid-cols-2 gap-6">
       <div id="asl-bar-chart"></div>
       <div id="depth-stack-chart"></div>
     </div>
-    <hr class="my-8 border-[#443320]">
-    <h2 class="text-2xl gold-title mb-6">⑩ 《A计划》运镜占比环形图</h2>
+    <hr class="my-8">
+    <h2 class="text-2xl gold-title mb-6">⑩ 《A计划》运镜类型环形图</h2>
     <div id="camera-ring-chart"></div>
   </section>
 
   <script>
-    // ===================== 1. 页面切换逻辑 =====================
-    const switches = document.querySelectorAll('.page-switch');
-    const sections = document.querySelectorAll('.page-section');
-    switches.forEach(btn => {
-      btn.addEventListener('click', () => {
-        const targetId = btn.dataset.target;
-        // 重置按钮激活态
-        switches.forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        // 切换页面
-        sections.forEach(s => s.classList.remove('active'));
-        document.getElementById(targetId).classList.add('active');
-      })
-    })
-
-    // 全局Tooltip工具函数
+    // ===================== 全局工具：Tooltip =====================
     const tooltip = d3.select("#tooltip");
     function showTip(event, html) {
       tooltip.style("opacity", 1)
@@ -203,8 +208,8 @@
     }
     function hideTip() { tooltip.style("opacity", 0); }
 
-    // ===================== 2. 模拟基础数据集（匹配文档数据） =====================
-    // 类型树图数据
+    // ===================== 模拟数据集 =====================
+    // 1. 类型树图数据
     const treeData = {
       name: "成龙全部影片",
       children: [
@@ -217,22 +222,54 @@
         {name:"古装功夫",value:6,score:7.5}
       ]
     };
-    // 口碑环图数据
+    // 2. 口碑环图
     const ringData = [
       {label:"经典高分",num:14,rate:32},
       {label:"稳定口碑",num:16,rate:36},
       {label:"商业转型",num:11,rate:24},
       {label:"低分争议",num:5,rate:8}
     ];
-    // 年代玫瑰图
-    const roseData = [
-      {era:"香港黄金期",count:16,avgScore:8.2},
-      {era:"全球好莱坞",count:11,avgScore:7.0},
-      {era:"晚期合拍",count:9,avgScore:6.6},
-      {era:"华语重塑",count:8,avgScore:7.1},
-      {era:"早期功夫喜剧",count:5,avgScore:7.7}
+    // 3. 类型饼图
+    const pieData = [
+      {type:"警匪动作",count:16},
+      {type:"好莱坞冒险",count:11},
+      {type:"晚期合拍",count:9},
+      {type:"华语剧情",count:8},
+      {type:"跨国探险",count:8},
+      {type:"古装功夫",count:6},
+      {type:"早期喜剧",count:5}
     ];
-    // ASL镜头时长数据
+    // 4. 年代玫瑰图
+    const roseData = [
+      {era:"80年代黄金期",count:16,avgScore:8.2},
+      {era:"90年代好莱坞",count:11,avgScore:7.0},
+      {era:"2010后合拍",count:9,avgScore:6.6},
+      {era:"00年代华语",count:8,avgScore:7.1},
+      {era:"70年代初",count:5,avgScore:7.7}
+    ];
+    // 5. 时序直方图
+    const histData = [
+      {year:1982,movie:2,box:1.2},
+      {year:1985,movie:3,box:3.5},
+      {year:1990,movie:4,box:6.8},
+      {year:1995,movie:2,box:12.3},
+      {year:2000,movie:2,box:8.6},
+      {year:2010,movie:1,box:18.2},
+      {year:2015,movie:1,box:7.5},
+      {year:2020,movie:1,box:4.1}
+    ];
+    // 6. 散点&等高线数据
+    const scatterData = [
+      {score:8.4,box:12.2,name:"警察故事"},
+      {score:8.2,box:8.5,name:"A计划"},
+      {score:7.5,box:6.3,name:"醉拳2"},
+      {score:7.0,box:15.8,name:"红番区"},
+      {score:6.6,box:9.2,name:"十二生肖"},
+      {score:6.2,box:3.5,name:"机器之血"},
+      {score:7.8,box:4.6,name:"龙少爷"},
+      {score:7.1,box:7.9,name:"英伦对决"}
+    ];
+    // 7. ASL镜头时长
     const aslData = [
       {film:"龙少爷",year:1982,asl:4.3,tag:"转型前"},
       {film:"A计划",year:1983,asl:2.2,tag:"转型分水岭"},
@@ -242,7 +279,7 @@
       {film:"我是谁",year:1998,asl:2.5,tag:"成熟"},
       {film:"十二生肖",year:2012,asl:1.9,tag:"成熟"}
     ];
-    // 景深镜头数据
+    // 8. 景深镜头
     const depthData = [
       {film:"龙少爷",plane:93,depth:7},
       {film:"A计划",plane:60,depth:40},
@@ -250,15 +287,15 @@
       {film:"我是谁",plane:33,depth:67},
       {film:"十二生肖",plane:41,depth:59}
     ];
-    // A计划运镜数据
+    // 9. A计划运镜
     const cameraData = [
       {type:"固定机位",pct:42},
       {type:"跟镜头",pct:31},
       {type:"移镜头",pct:13},
       {type:"推拉镜头",pct:9},
-      {type:"摇镜头",pct:9}
+      {type:"摇镜头",pct:5}
     ];
-    // 影评词云关键词
+    // 10. 词云数据
     const wordData = [
       {text:"功夫喜剧",size:48},
       {text:"成家班",size:44},
@@ -273,9 +310,44 @@
       {text:"英伦对决",size:22},
       {text:"红番区",size:20}
     ];
+    // 11. 合作网络图模拟数据
+    const forceNodes = [
+      {id:"成龙",group:0},
+      {id:"洪金宝",group:1},
+      {id:"元彪",group:1},
+      {id:"张曼玉",group:2},
+      {id:"林青霞",group:2},
+      {id:"唐季礼",group:3},
+      {id:"陈木胜",group:3}
+    ];
+    const forceLinks = [
+      {source:"成龙",target:"洪金宝",value:8},
+      {source:"成龙",target:"元彪",value:6},
+      {source:"成龙",target:"张曼玉",value:4},
+      {source:"成龙",target:"林青霞",value:3},
+      {source:"成龙",target:"唐季礼",value:7},
+      {source:"成龙",target:"陈木胜",value:5}
+    ];
 
-    // ===================== 3. D3图表渲染函数（仅示例核心图表，完整可按需扩展） =====================
-    // 3.1 层次树图
+    // ===================== 绘图函数合集 =====================
+    // 清空容器旧图表
+    function clearAllCharts() {
+      d3.selectAll("#tree-chart svg").remove();
+      d3.selectAll("#ring-chart svg").remove();
+      d3.selectAll("#pie-chart svg").remove();
+      d3.selectAll("#rose-chart svg").remove();
+      d3.selectAll("#hist-chart svg").remove();
+      d3.selectAll("#contour-chart svg").remove();
+      d3.selectAll("#scatter-chart svg").remove();
+      d3.selectAll("#force-chart svg").remove();
+      d3.selectAll("#map-chart svg").remove();
+      d3.selectAll("#wordcloud-chart svg").remove();
+      d3.selectAll("#asl-bar-chart svg").remove();
+      d3.selectAll("#depth-stack-chart svg").remove();
+      d3.selectAll("#camera-ring-chart svg").remove();
+    }
+
+    // 1. 树图
     function renderTreeMap() {
       const width = document.getElementById("tree-chart").clientWidth;
       const height = 500;
@@ -294,20 +366,220 @@
         .attr("height",d=>d.y1-d.y0)
         .attr("fill",d=>color(d.data.score))
         .attr("stroke","#000")
-        .on("mousemove",(e,d)=>showTip(e,`类型：${d.data.name}<br>影片数量：${d.data.value}部<br>平均豆瓣评分：${d.data.score}`))
+        .on("mousemove",(e,d)=>showTip(e,`类型：${d.data.name}<br>影片数量：${d.data.value}部<br>平均分：${d.data.score}`))
         .on("mouseout",hideTip);
       rect.append("text")
         .attr("x",6).attr("y",18).attr("fill","#000")
         .text(d=>d.data.name).style("font-size","14px");
     }
-    // 3.2 ASL剪辑柱状图
+
+    // 2. 口碑环图
+    function renderRingChart() {
+      const w = document.getElementById("ring-chart").clientWidth;
+      const h = 400;
+      const r = Math.min(w,h)/2 - 40;
+      const svg = d3.select("#ring-chart").append("svg")
+        .attr("width",w).attr("height",h)
+        .append("g").attr("transform",`translate(${w/2},${h/2})`);
+      const arc = d3.arc().innerRadius(r*0.6).outerRadius(r);
+      const pie = d3.pie().value(d=>d.rate);
+      const color = d3.scaleOrdinal().range(["#ffd770","#e6b050","#a47c3c","#553a18"]);
+      svg.selectAll("path")
+        .data(pie(ringData)).enter().append("path")
+        .attr("d",arc).attr("fill",(d,i)=>color(i))
+        .on("mousemove",(e,d)=>showTip(e,`口碑等级：${d.data.label}<br>占比：${d.data.rate}%`))
+        .on("mouseout",hideTip);
+    }
+
+    // 3. 类型饼图
+    function renderPieChart() {
+      const w = document.getElementById("pie-chart").clientWidth;
+      const h = 400;
+      const r = Math.min(w,h)/2 - 40;
+      const svg = d3.select("#pie-chart").append("svg")
+        .attr("width",w).attr("height",h)
+        .append("g").attr("transform",`translate(${w/2},${h/2})`);
+      const arc = d3.arc().innerRadius(0).outerRadius(r);
+      const pie = d3.pie().value(d=>d.count);
+      const color = d3.scaleOrdinal(d3.schemeTableau10);
+      svg.selectAll("path")
+        .data(pie(pieData)).enter().append("path")
+        .attr("d",arc).attr("fill",(d,i)=>color(i))
+        .on("mousemove",(e,d)=>showTip(e,`影片类型：${d.data.type}<br>数量：${d.data.count}部`))
+        .on("mouseout",hideTip);
+    }
+
+    // 4. 年代玫瑰图
+    function renderRoseChart() {
+      const w = document.getElementById("rose-chart").clientWidth;
+      const h = 400;
+      const r = Math.min(w,h)/2 - 40;
+      const svg = d3.select("#rose-chart").append("svg")
+        .attr("width",w).attr("height",h)
+        .append("g").attr("transform",`translate(${w/2},${h/2})`);
+      const theta = d3.scalePoint()
+        .domain(roseData.map((d,i)=>i))
+        .range([0, 2*Math.PI]);
+      const rScale = d3.scaleLinear().domain([0,20]).range([0,r]);
+      const line = d3.lineRadial()
+        .angle((d,i)=>theta(i))
+        .radius(d=>rScale(d.count));
+      svg.append("path")
+        .datum(roseData)
+        .attr("fill","rgba(255,215,112,0.2)")
+        .attr("stroke","#ffd770")
+        .attr("d",line);
+      svg.selectAll("circle")
+        .data(roseData).enter().append("circle")
+        .attr("cx",(d,i)=>Math.cos(theta(i)-Math.PI/2)*rScale(d.count))
+        .attr("cy",(d,i)=>Math.sin(theta(i)-Math.PI/2)*rScale(d.count))
+        .attr("r",6).fill("#ffc845")
+        .on("mousemove",(e,d)=>showTip(e,`年代：${d.era}<br>影片数：${d.count}<br>均分：${d.avgScore}`))
+        .on("mouseout",hideTip);
+    }
+
+    // 5. 时序直方图
+    function renderHistChart() {
+      const w = document.getElementById("hist-chart").clientWidth;
+      const h = 450;
+      const margin = {t:30,r:30,b:60,l:60};
+      const svg = d3.select("#hist-chart").append("svg")
+        .attr("width",w).attr("height",h);
+      const x = d3.scaleBand()
+        .domain(histData.map(d=>d.year))
+        .range([margin.l,w-margin.r]).padding(0.2);
+      const y1 = d3.scaleLinear().domain([0,5]).range([h-margin.b,margin.t]);
+      const y2 = d3.scaleLinear().domain([0,20]).range([h-margin.b,margin.t]);
+      svg.selectAll("rect")
+        .data(histData).enter().append("rect")
+        .attr("x",d=>x(d.year))
+        .attr("y",d=>y1(d.movie))
+        .attr("width",x.bandwidth())
+        .attr("height",d=>h-margin.b - y1(d.movie))
+        .fill("#ffd770")
+        .on("mousemove",(e,d)=>showTip(e,`${d.year}年<br>影片：${d.movie}部<br>票房：${d.box}亿`))
+        .on("mouseout",hideTip);
+      svg.append("g").attr("transform",`translate(0,${h-margin.b})`)
+        .call(d3.axisBottom(x)).selectAll("text").fill("#fff");
+      svg.append("g").attr("transform",`translate(${margin.l},0)`)
+        .call(d3.axisLeft(y1)).selectAll("text").fill("#fff");
+    }
+
+    // 6. 散点图
+    function renderScatterChart() {
+      const w = document.getElementById("scatter-chart").clientWidth;
+      const h = 450;
+      const margin = {t:30,r:30,b:60,l:60};
+      const svg = d3.select("#scatter-chart").append("svg")
+        .attr("width",w).attr("height",h);
+      const x = d3.scaleLinear().domain([6,9]).range([margin.l,w-margin.r]);
+      const y = d3.scaleLinear().domain([0,20]).range([h-margin.b,margin.t]);
+      svg.selectAll("circle")
+        .data(scatterData).enter().append("circle")
+        .attr("cx",d=>x(d.score))
+        .attr("cy",d=>y(d.box))
+        .attr("r",8).fill("#ffc845").opacity(0.7)
+        .on("mousemove",(e,d)=>showTip(e,`影片：${d.name}<br>评分：${d.score}<br>票房：${d.box}亿`))
+        .on("mouseout",hideTip);
+      svg.append("g").attr("transform",`translate(0,${h-margin.b})`)
+        .call(d3.axisBottom(x)).selectAll("text").fill("#fff");
+      svg.append("g").attr("transform",`translate(${margin.l},0)`)
+        .call(d3.axisLeft(y)).selectAll("text").fill("#fff");
+    }
+
+    // 7. 等高线密度图
+    function renderContourChart() {
+      const w = document.getElementById("contour-chart").clientWidth;
+      const h = 450;
+      const svg = d3.select("#contour-chart").append("svg")
+        .attr("width",w).attr("height",h);
+      const x = d3.scaleLinear().domain([6,9]).range([50,w-50]);
+      const y = d3.scaleLinear().domain([0,20]).range([h-50,50]);
+      const points = scatterData.map(d=>[x(d.score),y(d.box)]);
+      const contours = d3.contourDensity()
+        .x(p=>p[0]).y(p=>p[1])
+        .size([w,h]).bandwidth(40)(points);
+      svg.selectAll("path")
+        .data(contours).enter().append("path")
+        .attr("d",d3.geoPath())
+        .attr("fill",d=>`rgba(255,200,70,${d.value/10})`);
+    }
+
+    // 8. 力导向合作网络图
+    function renderForceChart() {
+      const w = document.getElementById("force-chart").clientWidth;
+      const h = 500;
+      const svg = d3.select("#force-chart").append("svg")
+        .attr("width",w).attr("height",h);
+      const simulation = d3.forceSimulation(forceNodes)
+        .force("link",d3.forceLink(forceLinks).id(d=>d.id).distance(100))
+        .force("charge",d3.forceManyBody().strength(-300))
+        .force("center",d3.forceCenter(w/2,h/2));
+      const link = svg.selectAll("line")
+        .data(forceLinks).enter().append("line")
+        .stroke("#8c6d31").strokeWidth(d=>d.value);
+      const node = svg.selectAll("circle")
+        .data(forceNodes).enter().append("circle")
+        .attr("r",d=>d.id==="成龙"?12:8)
+        .fill(d=>d.group===0?"#ffd770":"#6688cc")
+        .on("mousemove",(e,d)=>showTip(e,`人物：${d.id}`))
+        .on("mouseout",hideTip);
+      const text = svg.selectAll("text")
+        .data(forceNodes).enter().append("text")
+        .text(d=>d.id).fill("#fff").fontSize(12);
+      simulation.on("tick",()=>{
+        link.attr("x1",d=>d.source.x).attr("y1",d=>d.source.y)
+          .attr("x2",d=>d.target.x).attr("y2",d=>d.target.y);
+        node.attr("cx",d=>d.x).attr("cy",d=>d.y);
+        text.attr("x",d=>d.x+10).attr("y",d=>d.y+4);
+      })
+    }
+
+    // 9. 全球地图（简易占位）
+    function renderMapChart() {
+      const w = document.getElementById("map-chart").clientWidth;
+      const h = 450;
+      const svg = d3.select("#map-chart").append("svg")
+        .attr("width",w).attr("height",h);
+      svg.append("text")
+        .attr("x",w/2).attr("y",h/2)
+        .attr("text-anchor","middle").fill("#ffd770").fontSize(20)
+        .text("全球票房热力地图（可导入GeoJSON完善）");
+    }
+
+    // 10. 词云图
+    function renderWordCloud() {
+      const w = document.getElementById("wordcloud-chart").clientWidth;
+      const h = 400;
+      const svg = d3.select("#wordcloud-chart").append("svg")
+        .attr("width",w).attr("height",h)
+        .append("g").attr("transform",`translate(${w/2},${h/2})`);
+      const layout = d3.cloud()
+        .size([w-100,h-100])
+        .words(wordData)
+        .text(d=>d.text)
+        .fontSize(d=>d.size)
+        .on("end",words=>{
+          svg.selectAll("text")
+            .data(words).enter().append("text")
+            .attr("x",d=>d.x)
+            .attr("y",d=>d.y)
+            .attr("font-size",d=>d.size)
+            .attr("fill","#ffd770")
+            .text(d=>d.text)
+            .on("mousemove",(e,d)=>showTip(e,`关键词：${d.text}`))
+            .on("mouseout",hideTip);
+        });
+      layout.start();
+    }
+
+    // 11. ASL柱状图
     function renderASLChart() {
       const w = document.getElementById("asl-bar-chart").clientWidth;
       const h = 400;
       const margin = {t:20,r:20,b:60,l:80};
       const svg = d3.select("#asl-bar-chart").append("svg")
-        .attr("width",w).attr("height",h)
-        .style("background","transparent");
+        .attr("width",w).attr("height",h);
       const x = d3.scaleLinear().domain([0,4.5]).range([margin.l,w-margin.r]);
       const y = d3.scaleBand().domain(aslData.map(d=>d.film)).range([margin.t,h-margin.b]).padding(0.2);
       svg.selectAll("rect")
@@ -317,13 +589,46 @@
         .attr("width",d=>x(d.asl)-x(0))
         .attr("height",y.bandwidth())
         .attr("fill",d=>d.tag==="转型前"?"#ffc845":"#4288dd")
-        .on("mousemove",(e,d)=>showTip(e,`影片：${d.film}(${d.year})<br>平均镜头时长ASL：${d.asl}秒`))
+        .on("mousemove",(e,d)=>showTip(e,`${d.film}(${d.year})<br>ASL平均镜头时长：${d.asl}秒`))
         .on("mouseout",hideTip);
-      // 坐标轴
-      svg.append("g").attr("transform",`translate(0,${h-margin.b})`).call(d3.axisBottom(x)).selectAll("text").attr("fill","#fff");
-      svg.append("g").attr("transform",`translate(${margin.l},0)`).call(d3.axisLeft(y)).selectAll("text").attr("fill","#fff");
+      svg.append("g").attr("transform",`translate(0,${h-margin.b})`).call(d3.axisBottom(x)).selectAll("text").fill("#fff");
+      svg.append("g").attr("transform",`translate(${margin.l},0)`).call(d3.axisLeft(y)).selectAll("text").fill("#fff");
     }
-    // 3.3 运镜环形图
+
+    // 12. 景深堆叠图
+    function renderDepthStack() {
+      const w = document.getElementById("depth-stack-chart").clientWidth;
+      const h = 400;
+      const margin = {t:20,r:20,b:60,l:80};
+      const svg = d3.select("#depth-stack-chart").append("svg")
+        .attr("width",w).attr("height",h);
+      const x = d3.scaleBand()
+        .domain(depthData.map(d=>d.film))
+        .range([margin.l,w-margin.r]).padding(0.2);
+      const y = d3.scaleLinear().domain([0,100]).range([h-margin.b,margin.t]);
+      svg.selectAll("rect.plane")
+        .data(depthData).enter().append("rect")
+        .attr("x",d=>x(d.film))
+        .attr("y",d=>y(d.plane))
+        .attr("width",x.bandwidth())
+        .attr("height",d=>h-margin.b - y(d.plane))
+        .fill("#4466aa")
+        .on("mousemove",(e,d)=>showTip(e,`${d.film}<br>平面镜头：${d.plane}%`))
+        .on("mouseout",hideTip);
+      svg.selectAll("rect.depth")
+        .data(depthData).enter().append("rect")
+        .attr("x",d=>x(d.film))
+        .attr("y",d=>y(0))
+        .attr("width",x.bandwidth())
+        .attr("height",d=>h-margin.b - y(d.depth))
+        .fill("#ffd770")
+        .on("mousemove",(e,d)=>showTip(e,`${d.film}<br>景深镜头：${d.depth}%`))
+        .on("mouseout",hideTip);
+      svg.append("g").attr("transform",`translate(0,${h-margin.b})`).call(d3.axisBottom(x)).selectAll("text").fill("#fff");
+      svg.append("g").attr("transform",`translate(${margin.l},0)`).call(d3.axisLeft(y)).selectAll("text").fill("#fff");
+    }
+
+    // 13. 运镜环形图
     function renderCameraRing() {
       const w = document.getElementById("camera-ring-chart").clientWidth;
       const h = 400;
@@ -334,25 +639,50 @@
       const arc = d3.arc().innerRadius(r*0.5).outerRadius(r);
       const pie = d3.pie().value(d=>d.pct);
       const color = d3.scaleOrdinal().range(["#ffd770","#dd9944","#8c6d31","#664422","#443320"]);
-      const paths = svg.selectAll("path")
+      svg.selectAll("path")
         .data(pie(cameraData)).enter().append("path")
         .attr("d",arc)
         .attr("fill",(d,i)=>color(i))
-        .attr("stroke","#000")
-        .on("mousemove",(e,d)=>showTip(e,`运镜类型：${d.data.type}<br>占比：${d.data.pct}%`))
+        .on("mousemove",(e,d)=>showTip(e,`运镜：${d.data.type}<br>占比：${d.data.pct}%`))
         .on("mouseout",hideTip);
-      svg.selectAll("text.label")
-        .data(pie(cameraData)).enter().append("text")
-        .attr("transform",d=>`translate(${arc.centroid(d)})`)
-        .attr("text-anchor","middle")
-        .attr("fill","#000")
-        .text(d=>d.data.type);
     }
-    // 页面加载完成渲染所有图表
-    window.addEventListener("load",()=>{
+
+    // ===================== 统一渲染所有图表入口 =====================
+    function renderAllCharts() {
+      clearAllCharts();
       renderTreeMap();
+      renderRingChart();
+      renderPieChart();
+      renderRoseChart();
+      renderHistChart();
+      renderScatterChart();
+      renderContourChart();
+      renderForceChart();
+      renderMapChart();
+      renderWordCloud();
       renderASLChart();
+      renderDepthStack();
       renderCameraRing();
+    }
+
+    // ===================== 页面切换逻辑（切换后重绘图表） =====================
+    const switches = document.querySelectorAll('.page-switch');
+    const sections = document.querySelectorAll('.page-section');
+    switches.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const targetId = btn.dataset.target;
+        switches.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        sections.forEach(s => s.classList.remove('active'));
+        document.getElementById(targetId).classList.add('active');
+        // 切换页面立刻重绘全部图表，解决空白问题
+        setTimeout(renderAllCharts, 50);
+      })
+    })
+
+    // 页面首次加载执行渲染
+    window.addEventListener("load", ()=>{
+      renderAllCharts();
     })
   </script>
 </body>
